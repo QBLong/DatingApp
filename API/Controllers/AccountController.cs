@@ -19,11 +19,14 @@ namespace API.Controllers
     {
         private readonly DataContext dataContext;
         private readonly ITokenService tokenService;
+        private readonly IUserRepository userRepository;
 
-        public AccountController(DataContext dataContext, ITokenService tokenService)
+        public AccountController(DataContext dataContext, ITokenService tokenService, 
+            IUserRepository userRepository)
         {
             this.dataContext = dataContext;
             this.tokenService = tokenService;
+            this.userRepository = userRepository;
         }
 
         [HttpPost("register")] //api/account/register
@@ -43,14 +46,18 @@ namespace API.Controllers
 
                 return new UserDto {
                     Username = user.UserName,
-                    Token = tokenService.CreateToken(user)
+                    Token = tokenService.CreateToken(user),
+                    PhotoUrl = user.Photos.FirstOrDefault(x => x.IsMain)?.Url
                 };
             }
         }
 
         [HttpPost("login")]
         public async Task<ActionResult<UserDto>> Login(LoginDto loginDto) {
-            var user = await dataContext.Users.FirstOrDefaultAsync(x => x.UserName == loginDto.Username.ToLower());
+            var user = await dataContext.Users
+                .Include(x => x.Photos)
+                .FirstOrDefaultAsync(x => x.UserName == loginDto.Username.ToLower());
+            // var user = await this.userRepository.GetUserByUsernameAsync(loginDto.Username.ToLower());
 
             if (user == null) {
                 return Unauthorized("This username is not valid");
@@ -67,7 +74,8 @@ namespace API.Controllers
 
                 return new UserDto {
                     Username = user.UserName,
-                    Token = tokenService.CreateToken(user)
+                    Token = tokenService.CreateToken(user),
+                    PhotoUrl = user.Photos.FirstOrDefault(x => x.IsMain).Url
                 };
             }
         }
