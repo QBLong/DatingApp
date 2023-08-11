@@ -18,17 +18,15 @@ namespace API.Controllers
 {
     public class AccountController : BaseApiController
     {
-        private readonly DataContext dataContext;
         private readonly ITokenService tokenService;
-        private readonly IUserRepository userRepository;
         private readonly IMapper _mapper;
+        private readonly UserManager<AppUser> _userManager;
 
-        public AccountController(DataContext dataContext, ITokenService tokenService, 
-            IUserRepository userRepository, IMapper mapper)
+        public AccountController(UserManager<AppUser> userManager, ITokenService tokenService, 
+            IMapper mapper)
         {
-            this.dataContext = dataContext;
+            this._userManager = userManager;
             this.tokenService = tokenService;
-            this.userRepository = userRepository;
             this._mapper = mapper;
         }
 
@@ -38,55 +36,48 @@ namespace API.Controllers
                 return BadRequest("This username has been taken by someone else");
             }
             var user = this._mapper.Map<AppUser>(registerDto);
-            using (var hmac = new HMACSHA512()) {
-                user.UserName = registerDto.Username.ToLower();
-                user.PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(registerDto.Password));
-                user.PasswordSalt = hmac.Key;
 
-                dataContext.Users.Add(user);
-                await dataContext.SaveChangesAsync();
+            user.UserName = registerDto.Username.ToLower();
 
-                return new UserDto {
-                    Username = user.UserName,
-                    Token = tokenService.CreateToken(user),
-                    KnownAs = user.KnownAs,
-                    Gender = user.Gender
-                };
-            }
+            var result = await _userManager.CreateAsync(user, registerDto.Password);
+            if (!result.Succeeded) return BadRequest(result.Errors);
+
+            var roleResult = await _userManager.AddToRoleAsync(user, "Member");
+            if (!roleResult.Succeeded) return BadRequest(roleResult.Errors); 
+
+            return new UserDto {
+                Username = user.UserName,
+                Token = await tokenService.CreateToken(user),
+                KnownAs = user.KnownAs,
+                Gender = user.Gender
+            };
         }
 
         [HttpPost("login")]
         public async Task<ActionResult<UserDto>> Login(LoginDto loginDto) {
-            var user = await dataContext.Users
+            var user = await _userManager.Users
                 .Include(x => x.Photos)
                 .FirstOrDefaultAsync(x => x.UserName == loginDto.Username.ToLower());
-            // var user = await this.userRepository.GetUserByUsernameAsync(loginDto.Username.ToLower());
 
             if (user == null) {
                 return Unauthorized("This username is not valid");
             }
 
-            using (var hmac = new HMACSHA512(user.PasswordSalt)) {
-                var PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(loginDto.Password));
+            var result = await _userManager.CheckPasswordAsync(user, loginDto.Password);
+            
+            if (!result) return Unauthorized("Invalid Password");
 
-                for (int i = 0; i < PasswordHash.Count(); i++) {
-                    if (PasswordHash[i] != user.PasswordHash[i]) {
-                        return Unauthorized("This password is invalid");
-                    }
-                }
-
-                return new UserDto {
-                    Username = user.UserName,
-                    Token = tokenService.CreateToken(user),
-                    PhotoUrl = user.Photos.FirstOrDefault(x => x.IsMain).Url,
-                    KnownAs = user.KnownAs,
-                    Gender = user.Gender
-                };
-            }
+            return new UserDto {
+                Username = user.UserName,
+                Token = await tokenService.CreateToken(user),
+                PhotoUrl = user.Photos.FirstOrDefault(x => x.IsMain)?.Url,
+                KnownAs = user.KnownAs,
+                Gender = user.Gender
+            };
         }
 
         private async Task<bool> CheckUserExist(string username) {
-            return await dataContext.Users.AnyAsync(x => x.UserName == username.ToLower());
+            return await _userManager.Users.AnyAsync(x => x.UserName == username.ToLower());
         }
     }
 }

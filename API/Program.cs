@@ -1,10 +1,12 @@
 using System.Text;
 using API.Data;
+using API.Entities;
 using API.Extensions;
 using API.Interfaces;
 using API.Middlewares;
 using API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
@@ -50,8 +52,10 @@ using (var scope = app.Services.CreateScope()) {
 
     try {
         var context = service.GetRequiredService<DataContext>();
+        var userManager = service.GetRequiredService<UserManager<AppUser>>();
+        var roleManager = service.GetRequiredService<RoleManager<AppRole>>();
         await context.Database.MigrateAsync();
-        await Seed.SeedUser(context);
+        await Seed.SeedUser(userManager, roleManager);
     }
     catch(Exception ex) {
         var logger = app.Services.GetService<ILogger<Program>>();
