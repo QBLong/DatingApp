@@ -32,6 +32,7 @@ export class NavComponent implements OnInit {
       next: respones => {
         console.log(respones)
         this.router.navigateByUrl('/members')
+        this.model = {}
       },
       // error: error => {
       //   console.log(error)
