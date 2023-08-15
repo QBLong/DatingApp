@@ -13,6 +13,11 @@ namespace API.Data
 {
     public class Seed
     {
+        public static async Task ClearConnections(DataContext dataContext) {
+            dataContext.Connections.RemoveRange(dataContext.Connections);
+
+            await dataContext.SaveChangesAsync();
+        }
         public static async Task SeedUser(UserManager<AppUser> userManager, RoleManager<AppRole> roleManager) {
             if (await userManager.Users.AnyAsync()) {
                 return;
@@ -35,6 +40,9 @@ namespace API.Data
 
             foreach(var user in users) {
                 user.UserName = user.UserName.ToLower();
+                user.Photos.First().IsApproved = true;
+                user.Created = DateTime.SpecifyKind(user.Created, DateTimeKind.Utc);
+                user.LastActive = DateTime.SpecifyKind(user.LastActive, DateTimeKind.Utc);
 
                 await userManager.CreateAsync(user, "Pa$$w0rd");
                 await userManager.AddToRoleAsync(user, "Member");
